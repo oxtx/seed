@@ -1,0 +1,18 @@
+runtime: nodejs18 # Use the Node.js runtime version
+instance_class: F1 # Use the smallest instance class (adjust as needed)
+
+env_variables:
+  NODE_ENV: production # Set environment variables for your app
+  DB_HOST: "127.0.0.1"
+  DB_USER: "root"
+  DB_PASSWORD: ""
+  DB_NAME: "seeds"
+  DB_PORT: 3306
+  SECURITY_TOKEN: "your-secret-token-seed-organic"
+  BUCKET_NAME: "seed-organic-bucket"
+  PUBLIC_DOMAIL: "seed-organic-448716.uc.r.appspot.com"
+
+automatic_scaling:
+  target_cpu_utilization: 0.65
+  min_instances: 1
+  max_instances: 5

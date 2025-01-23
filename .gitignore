@@ -1,0 +1,12 @@
+credentials.dev.json
+credentials.prod.json
+credentials.json
+.env
+token.json
+
+
+node_modules/
+dist/
+build/
+
+downloads/
