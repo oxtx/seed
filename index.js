@@ -7,7 +7,7 @@ const { google } = require('googleapis');
 const dotenv = require('dotenv');
 const cors = require('cors');
 
-const { authorize, auth } = require('./auth');
+const { authorize, auth, authManually, loadCredentials, SCOPES, TOKEN_PATH } = require('./auth');
 const { fetchEmails } = require('./fetchEmails');
 const { extractDataFromPDF } = require('./extractData');
 const { insertSeedData } = require('./insertdb');
@@ -223,14 +223,15 @@ async function processEmails() {
     // }
   } catch (error) {
     console.error('Error processing emails:', error);
+    throw error;
   }
 }
 
 // Schedule the script to run every hour
-cron.schedule('0 * * * *', async () => {
-  console.log('Running email processing job...');
-  await processEmails();
-});
+// cron.schedule('0 * * * *', async () => {
+//   console.log('Running email processing job...');
+//   await processEmails();
+// });
 
 // Define a route to call processEmails when visiting localhost:3000/cronjob
 app.get('/cronjob', validateToken, async (req, res) => {
@@ -245,16 +246,78 @@ app.get('/cronjob', validateToken, async (req, res) => {
 });
 
 // Define a route to call authorize(true)
-app.get('/authorize', validateToken, async (req, res) => {
+// app.get('/authorize', validateToken, async (req, res) => {
+//   try {
+//     console.log('Received request to authorize...');
+//     await auth(app);
+//     res.redirect('/close-tab');
+//   } catch (error) {
+//     console.error('Error during authorization:', error);
+//     res.status(500).send('Authorization failed.');
+//   }
+// });
+
+
+app.get('/oauth2callback', async (req, res) => {
+  const code = req.query.code;
+  res.send('Authentication successful! You can close this tab.');
+  // server.close();
+
   try {
-    console.log('Received request to authorize...');
-    await auth(app);
-    res.status(200).send('Authorization completed successfully!');
-  } catch (error) {
-    console.error('Error during authorization:', error);
-    res.status(500).send('Authorization failed.');
+    const credentials = await loadCredentials();
+    const { client_id, client_secret, redirect_uris } = credentials.web;
+    const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+    const { tokens } = await oAuth2Client.getToken(code);
+    oAuth2Client.setCredentials(tokens);
+    await fileHandler.writeFile(TOKEN_PATH, JSON.stringify(tokens));
+    console.log('Token stored to', TOKEN_PATH);
+    // resolve(oAuth2Client);
+  } catch (err) {
+    // reject(err);
+    console.log(err)
   }
 });
+
+
+app.get('/get-auth-url', validateToken ,async (req, res) => {
+  const credentials = await loadCredentials();
+  const { client_id, client_secret, redirect_uris } = credentials.web;
+  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+
+  const authUrl = oAuth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: SCOPES,
+    prompt: 'consent',
+  });
+
+  res.send(`<a href="${authUrl}" target="_blank">Click here to authenticate</a>`);
+});
+
+// Serve a "close-tab" page
+app.get('/close-tab', (req, res) => {
+  res.send(`
+    <html>
+      <body>
+        <script>
+          window.close(); // Attempt to close the tab
+        </script>
+        <p>If the tab doesn't close automatically, you can close it manually.</p>
+      </body>
+    </html>
+  `);
+});
+
+// // Define a route to call authorize Manually
+// app.get('/auth', validateToken, async (req, res) => {
+//   try {
+//     console.log('Received request to authorize...');
+//     res.redirect('/close-tab');
+//     await authManually(app, './credentials.json');
+//   } catch (error) {
+//     console.error('Error during authorization:', error);
+//     res.status(500).send('Authorization failed.');
+//   }
+// });
 
 // Define a route to update lastEmailId.txt
 app.get('/update/lastEmailId', validateToken, async (req, res) => {
@@ -305,7 +368,7 @@ app.get('/last-email', validateToken, async (req, res) => {
   try {
 
     // Read the last email ID from the file
-    const lastEmailId = await fileHandler.readFile(LAST_EMAIL_TIME_FILE);
+    const lastEmailId = await fileHandler.readFile(LAST_EMAIL_ID_FILE);
 
 
     if (lastEmailId === '0') {
